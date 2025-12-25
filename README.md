@@ -1,4 +1,4 @@
-# node-red-contrib-smart-thermostat
+# @wrepinski/node-red-smart-thermostat
 
 A Node-RED node for intelligent temperature control of Zigbee 3.0 radiator valve thermostats and AC units. Uses an adaptive PID algorithm to provide smooth, battery-friendly temperature regulation instead of simple ON/OFF control.
 
@@ -25,14 +25,14 @@ A Node-RED node for intelligent temperature control of Zigbee 3.0 radiator valve
 
 1. Open Node-RED
 2. Go to **Menu -> Manage palette -> Install**
-3. Search for `node-red-contrib-smart-thermostat`
+3. Search for `@wrepinski/node-red-smart-thermostat`
 4. Click Install
 
 ### Via npm
 
 ```bash
 cd ~/.node-red
-npm install node-red-contrib-smart-thermostat
+npm install @wrepinski/node-red-smart-thermostat
 ```
 
 ### Manual/Offline Installation

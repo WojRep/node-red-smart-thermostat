@@ -1,4 +1,4 @@
-# node-red-contrib-smart-thermostat
+# @wrepinski/node-red-smart-thermostat
 
 Wtyczka Node-RED do inteligentnego sterowania termostatami Zigbee 3.0 (głowice grzejnikowe) oraz klimatyzatorami. Wykorzystuje adaptacyjny algorytm PID zapewniający płynną, oszczędzającą baterię regulację temperatury zamiast prostego sterowania ON/OFF.
 
@@ -21,14 +21,14 @@ Wtyczka Node-RED do inteligentnego sterowania termostatami Zigbee 3.0 (głowice 
 
 1. Otwórz Node-RED
 2. Przejdź do **Menu -> Manage palette -> Install**
-3. Wyszukaj `node-red-contrib-smart-thermostat`
+3. Wyszukaj `@wrepinski/node-red-smart-thermostat`
 4. Kliknij Install
 
 ### Przez npm
 
 ```bash
 cd ~/.node-red
-npm install node-red-contrib-smart-thermostat
+npm install @wrepinski/node-red-smart-thermostat
 ```
 
 ### Instalacja offline
