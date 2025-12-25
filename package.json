@@ -1,0 +1,38 @@
+{
+  "name": "@wrepinski/node-red-smart-thermostat",
+  "version": "2.0.6",
+  "description": "Smart thermostat node with adaptive PID control, weekly schedules, boost mode, and Home Assistant MQTT integration. Supports Zigbee radiator valves and AC units.",
+  "keywords": [
+    "node-red",
+    "thermostat",
+    "zigbee",
+    "pid",
+    "adaptive",
+    "temperature",
+    "heating",
+    "cooling",
+    "hvac",
+    "smart-home",
+    "air-conditioning",
+    "home-assistant",
+    "mqtt",
+    "schedule",
+    "boost"
+  ],
+  "author": "wrepinski",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WojRep/node-red-smart-thermostat.git"
+  },
+  "node-red": {
+    "version": ">=2.0.0",
+    "nodes": {
+      "smart-thermostat": "nodes/smart-thermostat.js"
+    }
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "main": "nodes/smart-thermostat.js"
+}

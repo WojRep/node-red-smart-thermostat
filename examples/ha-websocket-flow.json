@@ -1,0 +1,223 @@
+[
+    {
+        "id": "smart_thermostat_ha_example",
+        "type": "group",
+        "z": "",
+        "name": "Smart Thermostat + Home Assistant (WebSocket)",
+        "style": {
+            "label": true
+        },
+        "nodes": ["thermostat_node", "to_ha_entity", "ha_climate_entity", "from_ha_events", "parse_ha_commands", "temp_sensor_example"],
+        "x": 14,
+        "y": 19,
+        "w": 892,
+        "h": 202
+    },
+    {
+        "id": "temp_sensor_example",
+        "type": "inject",
+        "z": "",
+        "g": "smart_thermostat_ha_example",
+        "name": "Example: 20.5°C",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "20.5",
+        "payloadType": "num",
+        "x": 120,
+        "y": 80,
+        "wires": [["thermostat_node"]]
+    },
+    {
+        "id": "thermostat_node",
+        "type": "smart-thermostat",
+        "z": "",
+        "g": "smart_thermostat_ha_example",
+        "name": "Smart Thermostat",
+        "mode": "heat",
+        "precision": "0.5",
+        "targetTemp": "21",
+        "minTemp": "15",
+        "maxTemp": "25",
+        "hysteresis": "0.2",
+        "sampleInterval": "60",
+        "learningEnabled": true,
+        "maxOutputChange": "0.5",
+        "activeOutputFormat": "boolean",
+        "operatingMode": "manual",
+        "awayTemp": "16",
+        "mqttEnabled": false,
+        "mqttBroker": "",
+        "mqttBaseTopic": "homeassistant",
+        "haDeviceName": "",
+        "x": 330,
+        "y": 80,
+        "wires": [[], ["to_ha_entity"], []]
+    },
+    {
+        "id": "to_ha_entity",
+        "type": "function",
+        "z": "",
+        "g": "smart_thermostat_ha_example",
+        "name": "Map to HA Climate",
+        "func": "// Map Smart Thermostat debug output to HA climate entity\nconst debug = msg.payload;\n\n// Determine HVAC action\nlet action = 'idle';\nif (debug.operatingMode === 'off') {\n    action = 'off';\n} else if (debug.trend === 'heating' || (debug.activeMode === 'heat' && Math.abs(debug.error) >= 0.2)) {\n    action = 'heating';\n} else if (debug.trend === 'cooling' || (debug.activeMode === 'cool' && Math.abs(debug.error) >= 0.2)) {\n    action = 'cooling';\n}\n\n// Determine preset\nlet preset = 'none';\nif (debug.boostActive) {\n    preset = 'boost';\n} else if (debug.awayMode) {\n    preset = 'away';\n}\n\n// Determine state (HVAC mode)\nlet state = debug.mode || 'heat';\nif (debug.operatingMode === 'off') {\n    state = 'off';\n}\n\nmsg.payload = {\n    state: state,\n    attributes: {\n        current_temperature: debug.currentTemp,\n        temperature: debug.targetTemp,\n        hvac_action: action,\n        hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],\n        min_temp: debug.minTemp || 15,\n        max_temp: debug.maxTemp || 25,\n        target_temp_step: debug.precision || 0.5,\n        preset_mode: preset,\n        preset_modes: ['none', 'away', 'boost']\n    }\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 550,
+        "y": 80,
+        "wires": [["ha_climate_entity"]]
+    },
+    {
+        "id": "ha_climate_entity",
+        "type": "ha-entity",
+        "z": "",
+        "g": "smart_thermostat_ha_example",
+        "name": "HA Climate Entity",
+        "server": "",
+        "version": 3,
+        "entityType": "climate",
+        "config": [
+            {
+                "property": "name",
+                "value": "Smart Thermostat"
+            },
+            {
+                "property": "device_class",
+                "value": ""
+            },
+            {
+                "property": "icon",
+                "value": "mdi:thermostat"
+            },
+            {
+                "property": "unit_of_measurement",
+                "value": "°C"
+            },
+            {
+                "property": "state_class",
+                "value": ""
+            },
+            {
+                "property": "last_reset",
+                "value": ""
+            }
+        ],
+        "state": "state",
+        "stateType": "msg",
+        "attributes": [
+            {
+                "property": "current_temperature",
+                "value": "payload.attributes.current_temperature",
+                "valueType": "msg"
+            },
+            {
+                "property": "temperature",
+                "value": "payload.attributes.temperature",
+                "valueType": "msg"
+            },
+            {
+                "property": "hvac_action",
+                "value": "payload.attributes.hvac_action",
+                "valueType": "msg"
+            },
+            {
+                "property": "hvac_modes",
+                "value": "payload.attributes.hvac_modes",
+                "valueType": "msg"
+            },
+            {
+                "property": "min_temp",
+                "value": "payload.attributes.min_temp",
+                "valueType": "msg"
+            },
+            {
+                "property": "max_temp",
+                "value": "payload.attributes.max_temp",
+                "valueType": "msg"
+            },
+            {
+                "property": "target_temp_step",
+                "value": "payload.attributes.target_temp_step",
+                "valueType": "msg"
+            },
+            {
+                "property": "preset_mode",
+                "value": "payload.attributes.preset_mode",
+                "valueType": "msg"
+            },
+            {
+                "property": "preset_modes",
+                "value": "payload.attributes.preset_modes",
+                "valueType": "msg"
+            }
+        ],
+        "resend": true,
+        "outputLocation": "",
+        "outputLocationType": "none",
+        "inputOverride": "allow",
+        "outputOnStateChange": false,
+        "outputPayload": "",
+        "outputPayloadType": "str",
+        "x": 770,
+        "y": 80,
+        "wires": [[]]
+    },
+    {
+        "id": "from_ha_events",
+        "type": "server-state-changed",
+        "z": "",
+        "g": "smart_thermostat_ha_example",
+        "name": "HA Climate Events",
+        "server": "",
+        "version": 5,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entityId": "",
+        "entityIdType": "exact",
+        "outputInitially": false,
+        "stateType": "str",
+        "ifState": "",
+        "ifStateType": "str",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": false,
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": false,
+        "ignoreCurrentStateUnavailable": false,
+        "x": 130,
+        "y": 160,
+        "wires": [["parse_ha_commands"]]
+    },
+    {
+        "id": "parse_ha_commands",
+        "type": "function",
+        "z": "",
+        "g": "smart_thermostat_ha_example",
+        "name": "Parse HA Commands",
+        "func": "// Parse commands from Home Assistant\nconst data = msg.data;\n\nif (!data || !data.new_state || !data.old_state) {\n    return null;\n}\n\nconst newState = data.new_state;\nconst oldState = data.old_state;\nconst result = {};\n\n// Check if temperature changed\nif (newState.attributes.temperature !== oldState.attributes.temperature) {\n    result.setpoint = newState.attributes.temperature;\n}\n\n// Check if HVAC mode changed\nif (newState.state !== oldState.state) {\n    if (newState.state === 'off') {\n        result.operatingMode = 'off';\n    } else {\n        result.operatingMode = 'manual';\n        result.mode = newState.state;\n    }\n}\n\n// Check if preset changed\nif (newState.attributes.preset_mode !== oldState.attributes.preset_mode) {\n    const preset = newState.attributes.preset_mode;\n    if (preset === 'boost') {\n        // Boost: +3°C for 60 minutes (customize as needed)\n        result.boost = { temp: (newState.attributes.temperature || 21) + 3, duration: 60 };\n    } else if (preset === 'away') {\n        result.away = true;\n    } else {\n        // 'none' preset - disable boost and away\n        result.boost = false;\n        result.away = false;\n    }\n}\n\n// Only send if there are changes\nif (Object.keys(result).length > 0) {\n    // Add current temperature to trigger update\n    result.payload = newState.attributes.current_temperature || 20;\n    return result;\n}\n\nreturn null;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 350,
+        "y": 160,
+        "wires": [["thermostat_node"]]
+    }
+]

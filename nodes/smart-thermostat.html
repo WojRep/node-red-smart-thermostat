@@ -1,0 +1,368 @@
+<script type="text/javascript">
+    RED.nodes.registerType('smart-thermostat', {
+        category: 'home automation',
+        color: '#E6A23C',
+        defaults: {
+            name: { value: "" },
+            mode: { value: "heat" },
+            precision: { value: 0.5 },
+            minTemp: { value: 15, validate: RED.validators.number() },
+            maxTemp: { value: 25, validate: RED.validators.number() },
+            targetTemp: { value: 21, validate: RED.validators.number() },
+            hysteresis: { value: 0.2, validate: RED.validators.number() },
+            sampleInterval: { value: 60, validate: RED.validators.number() },
+            learningEnabled: { value: true },
+            maxOutputChange: { value: 0.5, validate: RED.validators.number() },
+            activeOutputFormat: { value: "boolean" },
+            // Schedule & modes
+            operatingMode: { value: "manual" },
+            awayTemp: { value: 16, validate: RED.validators.number() },
+            // MQTT Home Assistant
+            mqttEnabled: { value: false },
+            mqttBroker: { value: "", type: "mqtt-broker", required: false },
+            mqttBaseTopic: { value: "homeassistant" },
+            haDeviceName: { value: "" }
+        },
+        inputs: 1,
+        outputs: 3,
+        icon: "thermometer.svg",
+        inputLabels: "temperature / setpoint / mode",
+        outputLabels: ["setpoint", "debug / status", "active regulation"],
+        label: function() {
+            return this.name || "smart thermostat";
+        },
+        paletteLabel: "smart thermostat",
+        oneditprepare: function() {
+            var node = this;
+
+            // Temperature validation
+            function validateTemps() {
+                var min = parseFloat($("#node-input-minTemp").val());
+                var max = parseFloat($("#node-input-maxTemp").val());
+                var target = parseFloat($("#node-input-targetTemp").val());
+
+                if (min >= max) {
+                    $("#temp-warning").text("Warning: Min temperature must be less than max temperature").show();
+                } else if (target < min || target > max) {
+                    $("#temp-warning").text("Warning: Target temperature should be between min and max").show();
+                } else {
+                    $("#temp-warning").hide();
+                }
+            }
+
+            $("#node-input-minTemp, #node-input-maxTemp, #node-input-targetTemp").on('change keyup', validateTemps);
+
+            // Reset button
+            $("#node-reset-btn").click(function() {
+                if (confirm("Reset learned parameters? The controller will restart learning.")) {
+                    $.ajax({
+                        url: "smart-thermostat/" + node.id + "/reset",
+                        type: "POST",
+                        success: function(resp) {
+                            RED.notify("Controller reset successfully", "success");
+                        },
+                        error: function(xhr) {
+                            RED.notify("Failed to reset controller", "error");
+                        }
+                    });
+                }
+            });
+
+            // MQTT toggle visibility
+            function toggleMqttFields() {
+                var mqttEnabled = $("#node-input-mqttEnabled").is(":checked");
+                if (mqttEnabled) {
+                    $(".mqtt-fields").show();
+                } else {
+                    $(".mqtt-fields").hide();
+                }
+            }
+
+            $("#node-input-mqttEnabled").on("change", toggleMqttFields);
+            toggleMqttFields();
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="smart-thermostat">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Smart Thermostat">
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-mode"><i class="fa fa-exchange"></i> Mode</label>
+        <select id="node-input-mode" style="width: 150px;">
+            <option value="heat">Heat</option>
+            <option value="cool">Cool</option>
+            <option value="heat_cool">Heat/Cool (Auto)</option>
+        </select>
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(HA HVAC mode)</span>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-precision"><i class="fa fa-bullseye"></i> Precision</label>
+        <select id="node-input-precision" style="width: 150px;">
+            <option value="1">1°C</option>
+            <option value="0.5">0.5°C</option>
+            <option value="0.2">0.2°C</option>
+            <option value="0.1">0.1°C</option>
+        </select>
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(thermostat step size)</span>
+    </div>
+
+    <div class="form-row">
+        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Temperature Settings</h4>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-targetTemp"><i class="fa fa-crosshairs"></i> Target Temp</label>
+        <input type="number" id="node-input-targetTemp" step="0.5" style="width: 80px;"> °C
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(default setpoint)</span>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-minTemp"><i class="fa fa-thermometer-empty"></i> Min Temp</label>
+        <input type="number" id="node-input-minTemp" step="0.5" style="width: 80px;"> °C
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-maxTemp"><i class="fa fa-thermometer-full"></i> Max Temp</label>
+        <input type="number" id="node-input-maxTemp" step="0.5" style="width: 80px;"> °C
+    </div>
+
+    <div class="form-row">
+        <span id="temp-warning" style="color: #e74c3c; display: none;"></span>
+    </div>
+
+    <div class="form-row">
+        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Controller Settings</h4>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-hysteresis"><i class="fa fa-arrows-h"></i> Hysteresis</label>
+        <input type="number" id="node-input-hysteresis" step="0.1" min="0" max="2" style="width: 80px;"> °C
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(dead-band to prevent oscillation)</span>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-maxOutputChange"><i class="fa fa-tachometer"></i> Max Change</label>
+        <input type="number" id="node-input-maxOutputChange" step="0.1" min="0.1" max="2" style="width: 80px;"> °C/cycle
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(rate limiting for battery saving)</span>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-sampleInterval"><i class="fa fa-clock-o"></i> Sample Interval</label>
+        <input type="number" id="node-input-sampleInterval" step="1" min="1" style="width: 80px;"> seconds
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(expected time between readings)</span>
+    </div>
+
+    <div class="form-row">
+        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Adaptive Learning</h4>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-learningEnabled"><i class="fa fa-graduation-cap"></i> Auto-tuning</label>
+        <input type="checkbox" id="node-input-learningEnabled" style="width: auto; vertical-align: middle;">
+        <span style="margin-left: 5px; color: #666; font-size: 12px;">Enable adaptive learning of PID parameters</span>
+    </div>
+
+    <div class="form-row">
+        <button type="button" id="node-reset-btn" class="red-ui-button" style="margin-top: 10px;">
+            <i class="fa fa-refresh"></i> Reset Learned Parameters
+        </button>
+    </div>
+
+    <div class="form-row">
+        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Output Settings</h4>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-activeOutputFormat"><i class="fa fa-sign-out"></i> Active Output</label>
+        <select id="node-input-activeOutputFormat" style="width: 150px;">
+            <option value="boolean">Boolean (true/false)</option>
+            <option value="number">Number (1/0)</option>
+        </select>
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(output 3 format)</span>
+    </div>
+
+    <div class="form-row">
+        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Schedule & Modes</h4>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-operatingMode"><i class="fa fa-calendar"></i> Operating Mode</label>
+        <select id="node-input-operatingMode" style="width: 150px;">
+            <option value="manual">Manual</option>
+            <option value="schedule">Schedule</option>
+            <option value="off">Off</option>
+        </select>
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(default mode at startup)</span>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-awayTemp"><i class="fa fa-home"></i> Away Temp</label>
+        <input type="number" id="node-input-awayTemp" step="0.5" style="width: 80px;"> °C
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(temperature limit in away mode)</span>
+    </div>
+
+    <div class="form-row">
+        <span style="color: #666; font-size: 12px;">
+            <i class="fa fa-info-circle"></i> Configure schedule via <code>msg.schedule</code>, boost via <code>msg.boost</code>, away via <code>msg.away</code>
+        </span>
+    </div>
+
+    <div class="form-row">
+        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Home Assistant Integration</h4>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-mqttEnabled"><i class="fa fa-cloud"></i> MQTT Discovery</label>
+        <input type="checkbox" id="node-input-mqttEnabled" style="width: auto; vertical-align: middle;">
+        <span style="margin-left: 5px; color: #666; font-size: 12px;">Enable MQTT climate entity in Home Assistant</span>
+    </div>
+
+    <div class="form-row mqtt-fields">
+        <label for="node-input-mqttBroker"><i class="fa fa-server"></i> MQTT Broker</label>
+        <input type="text" id="node-input-mqttBroker">
+    </div>
+
+    <div class="form-row mqtt-fields">
+        <label for="node-input-haDeviceName"><i class="fa fa-tag"></i> HA Device Name</label>
+        <input type="text" id="node-input-haDeviceName" placeholder="Smart Thermostat">
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(name in Home Assistant)</span>
+    </div>
+
+    <div class="form-row mqtt-fields">
+        <label for="node-input-mqttBaseTopic"><i class="fa fa-sitemap"></i> Discovery Topic</label>
+        <input type="text" id="node-input-mqttBaseTopic" placeholder="homeassistant">
+        <span style="margin-left: 10px; color: #666; font-size: 12px;">(HA MQTT discovery prefix)</span>
+    </div>
+</script>
+
+<script type="text/html" data-help-name="smart-thermostat">
+    <p>Smart thermostat with adaptive PID control for Zigbee 3.0 radiator valves and AC units.
+    Supports heating, cooling, automatic mode switching, weekly schedules, boost mode, and Home Assistant integration.</p>
+
+    <h3>Inputs</h3>
+    <dl class="message-properties">
+        <dt>payload <span class="property-type">number</span></dt>
+        <dd>Current temperature reading from sensor</dd>
+        <dt class="optional">setpoint <span class="property-type">number</span></dt>
+        <dd>Override target temperature (optional)</dd>
+        <dt class="optional">mode <span class="property-type">string</span></dt>
+        <dd>Change HVAC mode: "heat", "cool", or "heat_cool"</dd>
+        <dt class="optional">operatingMode <span class="property-type">string</span></dt>
+        <dd>Change operating mode: "manual", "schedule", or "off"</dd>
+        <dt class="optional">schedule <span class="property-type">object</span></dt>
+        <dd>Weekly schedule with temperature slots (see examples below)</dd>
+        <dt class="optional">boost <span class="property-type">object|boolean</span></dt>
+        <dd>Activate boost: <code>{temp: 24, duration: 60}</code> or <code>false</code> to disable</dd>
+        <dt class="optional">away <span class="property-type">boolean|number</span></dt>
+        <dd>Away mode: <code>true</code>, <code>false</code>, or specific temperature</dd>
+    </dl>
+
+    <h3>Outputs</h3>
+    <ol class="node-ports">
+        <li>Temperature Setpoint
+            <dl class="message-properties">
+                <dt>payload <span class="property-type">number</span></dt>
+                <dd>Calculated setpoint to send to thermostat/AC (rounded to precision)</dd>
+            </dl>
+        </li>
+        <li>Debug / Status
+            <dl class="message-properties">
+                <dt>payload <span class="property-type">object</span></dt>
+                <dd>Diagnostic info: currentTemp, targetTemp, setpoint, error, trend, mode, PID state</dd>
+            </dl>
+        </li>
+        <li>Active Regulation
+            <dl class="message-properties">
+                <dt>payload <span class="property-type">boolean | number</span></dt>
+                <dd>true/1 when actively regulating, false/0 when idle or stable</dd>
+            </dl>
+        </li>
+    </ol>
+
+    <h3>Operating Modes (HA HVAC Compatible)</h3>
+    <ul>
+        <li><b>heat</b> - Setpoint above target when heating needed (for radiator valves)</li>
+        <li><b>cool</b> - Setpoint below target when cooling needed (for AC units)</li>
+        <li><b>heat_cool</b> - Automatically switches between heat and cool</li>
+    </ul>
+
+    <h3>Details</h3>
+    <p>This node implements an adaptive PID controller that learns the thermal characteristics
+    of your heating/cooling system and adjusts its parameters for optimal performance.</p>
+
+    <h4>Key Features:</h4>
+    <ul>
+        <li><b>Heating & Cooling</b> - Works with radiator valves and AC units</li>
+        <li><b>Smooth regulation</b> - Avoids ON/OFF switching that drains batteries</li>
+        <li><b>Rate limiting</b> - Limits output changes to prevent rapid valve movements</li>
+        <li><b>Auto-tuning</b> - Automatically learns optimal PID parameters</li>
+        <li><b>Hysteresis</b> - Dead-band prevents oscillation near setpoint</li>
+        <li><b>Trend detection</b> - Anticipates temperature changes</li>
+    </ul>
+
+    <h4>Usage:</h4>
+    <ol>
+        <li>Select the operating mode (heat/cool/heat_cool)</li>
+        <li>Set thermostat precision (matches your device's step size)</li>
+        <li>Connect temperature sensor output to this node's input</li>
+        <li>Connect output 1 to your Zigbee thermostat/AC set-temperature</li>
+        <li>Optionally connect output 2 to a debug node for monitoring</li>
+        <li>Configure min/max/target temperatures</li>
+        <li>Enable learning and let the system adapt (typically 1-24 hours)</li>
+    </ol>
+
+    <h4>Dynamic Control:</h4>
+    <p>Send messages to change settings dynamically:</p>
+    <ul>
+        <li><code>msg.setpoint = 22</code> - Change target temperature</li>
+        <li><code>msg.mode = "cool"</code> - Switch to cooling mode</li>
+        <li><code>msg.operatingMode = "schedule"</code> - Enable schedule mode</li>
+        <li><code>msg.boost = {temp: 24, duration: 60}</code> - Boost to 24°C for 60 minutes</li>
+        <li><code>msg.away = true</code> - Enable away mode</li>
+    </ul>
+
+    <h4>Schedule Format:</h4>
+    <p>Weekly schedule with flexible time slots per day:</p>
+    <pre>msg.schedule = {
+    "monday": [
+        {"time": "06:00", "temp": 21},
+        {"time": "08:30", "temp": 19},
+        {"time": "17:00", "temp": 21},
+        {"time": "22:00", "temp": 18}
+    ],
+    "tuesday": [
+        {"time": "06:00", "temp": 21},
+        {"time": "22:00", "temp": 18}
+    ],
+    // ... other days
+    "default": 18  // fallback temperature
+}</pre>
+
+    <h4>Temperature Priority:</h4>
+    <ol>
+        <li><b>Boost</b> - Highest priority, overrides everything</li>
+        <li><b>Away</b> - Limits maximum temperature</li>
+        <li><b>Schedule</b> - Uses scheduled temperature for current time</li>
+        <li><b>Manual</b> - Uses configured target temperature</li>
+    </ol>
+
+    <h4>Home Assistant Integration:</h4>
+    <p>Enable MQTT Discovery to automatically create a climate entity in Home Assistant:</p>
+    <ul>
+        <li>Native thermostat card support</li>
+        <li>Temperature control from HA dashboard</li>
+        <li>Preset modes: away, boost</li>
+        <li>Works with voice assistants (Alexa, Google)</li>
+    </ul>
+    <p>Requirements: MQTT broker configured in Node-RED, MQTT integration in HA.</p>
+
+    <h3>References</h3>
+    <ul>
+        <li><a href="https://github.com/WojRep/node-red-smart-thermostat">GitHub Repository</a></li>
+    </ul>
+</script>
