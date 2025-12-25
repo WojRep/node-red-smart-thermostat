@@ -592,6 +592,18 @@ This deletes the state file and resets all learned parameters.
 
 ## Changelog
 
+### v2.0.8
+
+- **Fixed Active Output (Output 3)** - Improved logic for heating/cooling activation signal
+- Now correctly indicates when boiler/AC should be active
+- Implemented hysteresis with "latch" memory - prevents rapid on/off cycling
+- Active output now properly tracks target achievement state
+
+### v2.0.7
+
+- Fixed npm package metadata (repository URL)
+- Fixed package name in installation instructions
+
 ### v2.0.6
 
 - **Repository Migration** - Moved to new repository: node-red-smart-thermostat

@@ -97,6 +97,10 @@ module.exports = function(RED) {
         // Create controller
         const controller = new AdaptiveController(controllerConfig);
 
+        // State for hysteresis "latch" - remembers if heating/cooling was active
+        let wasHeatingActive = false;
+        let wasCoolingActive = false;
+
         // MQTT Home Assistant Integration (optional)
         const mqttEnabled = config.mqttEnabled === true;
         let mqttIntegration = null;
@@ -386,10 +390,50 @@ module.exports = function(RED) {
                 mqttIntegration.publishState(mqttClient, result);
             }
 
-            // Determine if actively regulating (not idle, not stable)
-            const isActive = result.debug.trend !== 'idle' &&
-                             result.debug.trend !== 'stable' &&
-                             Math.abs(result.debug.error) >= controllerConfig.hysteresis;
+            // Determine if heating/cooling system should be active
+            // This output can be used to control: boiler, circulation pump, AC unit, etc.
+            // Uses hysteresis with "latch" - remembers state until threshold crossed
+            const activeMode = result.debug.activeMode;
+            const error = result.debug.error; // positive = need heat, negative = need cool
+            const operatingMode = result.debug.operatingMode;
+            const hysteresis = controllerConfig.hysteresis;
+
+            let isActive = false;
+
+            if (operatingMode === 'off') {
+                // OFF mode - nothing active
+                wasHeatingActive = false;
+                wasCoolingActive = false;
+                isActive = false;
+            } else if (activeMode === 'heat') {
+                // Heating mode with hysteresis latch:
+                // - Turn ON when temp drops below (target - hysteresis)
+                // - Turn OFF when temp reaches target
+                // - In between: keep previous state
+                if (error > hysteresis) {
+                    // Too cold - definitely need heating
+                    wasHeatingActive = true;
+                } else if (error <= 0) {
+                    // Reached or exceeded target - stop heating
+                    wasHeatingActive = false;
+                }
+                // else: in hysteresis zone - keep previous state (wasHeatingActive unchanged)
+                isActive = wasHeatingActive;
+            } else if (activeMode === 'cool') {
+                // Cooling mode with hysteresis latch:
+                // - Turn ON when temp rises above (target + hysteresis)
+                // - Turn OFF when temp reaches target
+                // - In between: keep previous state
+                if (error < -hysteresis) {
+                    // Too hot - definitely need cooling
+                    wasCoolingActive = true;
+                } else if (error >= 0) {
+                    // Reached or dropped below target - stop cooling
+                    wasCoolingActive = false;
+                }
+                // else: in hysteresis zone - keep previous state (wasCoolingActive unchanged)
+                isActive = wasCoolingActive;
+            }
 
             // Send output messages
             const msg1 = {

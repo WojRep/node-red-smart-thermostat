@@ -377,6 +377,18 @@ To usuwa plik stanu i resetuje wszystkie nauczone parametry.
 
 ## Historia zmian
 
+### v2.0.8
+
+- **Poprawiono wyjście Active (Wyjście 3)** - Ulepszona logika sygnału aktywacji grzania/chłodzenia
+- Teraz poprawnie wskazuje kiedy kocioł/klimatyzator powinien być aktywny
+- Zaimplementowano histerezę z "zatrzaskiem" - zapobiega szybkim cyklom włącz/wyłącz
+- Wyjście aktywne teraz prawidłowo śledzi stan osiągnięcia celu
+
+### v2.0.7
+
+- Poprawiono metadane pakietu npm (URL repozytorium)
+- Poprawiono nazwę pakietu w instrukcjach instalacji
+
 ### v2.0.6
 
 - **Migracja repozytorium** - Przeniesiono do nowego repozytorium: node-red-smart-thermostat
