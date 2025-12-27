@@ -1,2 +1,4 @@
 .DS_Store
 wrepinski-node-red-smart-thermostat-*.tgz
+.claude
+.vscode/

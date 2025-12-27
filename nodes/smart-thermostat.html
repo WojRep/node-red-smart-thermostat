@@ -17,6 +17,10 @@
             // Schedule & modes
             operatingMode: { value: "manual" },
             awayTemp: { value: 16, validate: RED.validators.number() },
+            // Schedule configuration
+            scheduleEnabled: { value: false },
+            scheduleConfig: { value: null },
+            scheduleTimezone: { value: "local" },
             // MQTT Home Assistant
             mqttEnabled: { value: false },
             mqttBroker: { value: "", type: "mqtt-broker", required: false },
@@ -34,6 +38,19 @@
         paletteLabel: "smart thermostat",
         oneditprepare: function() {
             var node = this;
+
+            // Initialize tabs
+            var tabs = RED.tabs.create({
+                id: "node-input-tabs",
+                onchange: function(tab) {
+                    $("#node-input-tabs-content").children().hide();
+                    $("#" + tab.id).show();
+                }
+            });
+            tabs.addTab({id: "tab-settings", label: "Settings"});
+            tabs.addTab({id: "tab-schedule", label: "Schedule"});
+            tabs.addTab({id: "tab-mqtt", label: "MQTT"});
+            tabs.activateTab("tab-settings");
 
             // Temperature validation
             function validateTemps() {
@@ -80,163 +97,445 @@
 
             $("#node-input-mqttEnabled").on("change", toggleMqttFields);
             toggleMqttFields();
+
+            // ========== Schedule Editor ==========
+            var days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+            var dayLabels = {
+                monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday',
+                thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday'
+            };
+
+            // Deep copy schedule config or empty object
+            var scheduleData = node.scheduleConfig ? JSON.parse(JSON.stringify(node.scheduleConfig)) : {};
+
+            // Set timezone value
+            if (node.scheduleTimezone) {
+                $("#node-input-scheduleTimezone").val(node.scheduleTimezone);
+            }
+
+            function renderSchedule() {
+                var container = $('#schedule-days-container');
+                container.empty();
+
+                days.forEach(function(day) {
+                    var slots = scheduleData[day] || [];
+                    var dayDiv = $('<div class="schedule-day"></div>');
+                    dayDiv.append('<div class="schedule-day-header">' + dayLabels[day] + '</div>');
+
+                    var slotsDiv = $('<div class="schedule-slots"></div>');
+                    slots.forEach(function(slot, idx) {
+                        slotsDiv.append(
+                            '<span class="schedule-slot">' +
+                                '<input type="time" value="' + slot.time + '" class="slot-time" data-day="' + day + '" data-idx="' + idx + '">' +
+                                ' &rarr; <input type="number" value="' + slot.temp + '" class="slot-temp" data-day="' + day + '" data-idx="' + idx + '" ' +
+                                    'min="5" max="35" step="0.5" style="width:55px;">&deg;C' +
+                                '<span class="schedule-slot-remove" data-day="' + day + '" data-idx="' + idx + '">&times;</span>' +
+                            '</span>'
+                        );
+                    });
+
+                    slotsDiv.append('<button type="button" class="red-ui-button red-ui-button-small schedule-add-slot" data-day="' + day + '">+ Add</button>');
+                    dayDiv.append(slotsDiv);
+                    container.append(dayDiv);
+                });
+            }
+
+            // Event: Add slot
+            $('#schedule-days-container').on('click', '.schedule-add-slot', function() {
+                var day = $(this).data('day');
+                if (!scheduleData[day]) scheduleData[day] = [];
+                scheduleData[day].push({time: '08:00', temp: 20});
+                renderSchedule();
+            });
+
+            // Event: Remove slot
+            $('#schedule-days-container').on('click', '.schedule-slot-remove', function() {
+                var day = $(this).data('day');
+                var idx = $(this).data('idx');
+                scheduleData[day].splice(idx, 1);
+                if (scheduleData[day].length === 0) {
+                    delete scheduleData[day];
+                }
+                renderSchedule();
+            });
+
+            // Event: Change time or temp
+            $('#schedule-days-container').on('change', '.slot-time, .slot-temp', function() {
+                var day = $(this).data('day');
+                var idx = $(this).data('idx');
+                if ($(this).hasClass('slot-time')) {
+                    scheduleData[day][idx].time = $(this).val();
+                } else {
+                    scheduleData[day][idx].temp = parseFloat($(this).val());
+                }
+                // Sort by time
+                scheduleData[day].sort(function(a, b) {
+                    return a.time.localeCompare(b.time);
+                });
+                renderSchedule();
+            });
+
+            // Copy Monday to weekdays
+            $('#schedule-copy-weekdays').click(function() {
+                var monday = scheduleData['monday'] || [];
+                ['tuesday','wednesday','thursday','friday'].forEach(function(day) {
+                    scheduleData[day] = JSON.parse(JSON.stringify(monday));
+                });
+                renderSchedule();
+                RED.notify("Copied Monday to Tue-Fri", "info");
+            });
+
+            // Copy Saturday to Sunday
+            $('#schedule-copy-weekend').click(function() {
+                var saturday = scheduleData['saturday'] || [];
+                scheduleData['sunday'] = JSON.parse(JSON.stringify(saturday));
+                renderSchedule();
+                RED.notify("Copied Saturday to Sunday", "info");
+            });
+
+            // Clear all
+            $('#schedule-clear').click(function() {
+                if (confirm("Clear all schedule slots?")) {
+                    days.forEach(function(day) {
+                        delete scheduleData[day];
+                    });
+                    renderSchedule();
+                }
+            });
+
+            // Toggle schedule fields visibility
+            function toggleScheduleFields() {
+                if ($('#node-input-scheduleEnabled').is(':checked')) {
+                    $('.schedule-fields').show();
+                } else {
+                    $('.schedule-fields').hide();
+                }
+            }
+
+            $('#node-input-scheduleEnabled').on('change', toggleScheduleFields);
+            toggleScheduleFields();
+
+            // Initial render
+            renderSchedule();
+
+            // Store scheduleData reference for oneditsave
+            node._scheduleData = scheduleData;
+        },
+        oneditsave: function() {
+            // Save schedule data
+            if (this._scheduleData) {
+                this._scheduleData.timezone = $('#node-input-scheduleTimezone').val();
+                // Remove legacy default field - we use targetTemp from Settings
+                delete this._scheduleData.default;
+                this.scheduleConfig = this._scheduleData;
+            }
         }
     });
 </script>
 
+<style>
+    .schedule-day {
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        margin: 8px 0;
+        padding: 8px;
+        background: #fafafa;
+    }
+    .schedule-day-header {
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #333;
+    }
+    .schedule-slots {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        align-items: center;
+    }
+    .schedule-slot {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        background: #e8f4fc;
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid #b8d4e8;
+    }
+    .schedule-slot input[type="time"] {
+        width: 90px;
+        padding: 2px 4px;
+    }
+    .schedule-slot input[type="number"] {
+        padding: 2px 4px;
+    }
+    .schedule-slot-remove {
+        color: #c00;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 16px;
+        margin-left: 5px;
+        line-height: 1;
+    }
+    .schedule-slot-remove:hover {
+        color: #f00;
+    }
+    .schedule-add-slot {
+        font-size: 11px !important;
+        padding: 2px 8px !important;
+    }
+    #node-input-tabs-content {
+        min-height: 400px;
+    }
+    #node-input-tabs-content > div {
+        padding-top: 10px;
+    }
+</style>
+
 <script type="text/html" data-template-name="smart-thermostat">
+    <!-- Tabs -->
     <div class="form-row">
-        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Smart Thermostat">
+        <ul id="node-input-tabs" style="min-width: 600px; margin-bottom: 0;"></ul>
     </div>
 
-    <div class="form-row">
-        <label for="node-input-mode"><i class="fa fa-exchange"></i> Mode</label>
-        <select id="node-input-mode" style="width: 150px;">
-            <option value="heat">Heat</option>
-            <option value="cool">Cool</option>
-            <option value="heat_cool">Heat/Cool (Auto)</option>
-        </select>
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(HA HVAC mode)</span>
-    </div>
+    <div id="node-input-tabs-content">
+        <!-- ========== TAB: Settings ========== -->
+        <div id="tab-settings" style="display:none;">
+            <div class="form-row">
+                <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+                <input type="text" id="node-input-name" placeholder="Smart Thermostat">
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-precision"><i class="fa fa-bullseye"></i> Precision</label>
-        <select id="node-input-precision" style="width: 150px;">
-            <option value="1">1°C</option>
-            <option value="0.5">0.5°C</option>
-            <option value="0.2">0.2°C</option>
-            <option value="0.1">0.1°C</option>
-        </select>
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(thermostat step size)</span>
-    </div>
+            <div class="form-row">
+                <label for="node-input-mode"><i class="fa fa-exchange"></i> Mode</label>
+                <select id="node-input-mode" style="width: 150px;">
+                    <option value="heat">Heat</option>
+                    <option value="cool">Cool</option>
+                    <option value="heat_cool">Heat/Cool (Auto)</option>
+                </select>
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(HA HVAC mode)</span>
+            </div>
 
-    <div class="form-row">
-        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Temperature Settings</h4>
-    </div>
+            <div class="form-row">
+                <label for="node-input-precision"><i class="fa fa-bullseye"></i> Precision</label>
+                <select id="node-input-precision" style="width: 150px;">
+                    <option value="1">1°C</option>
+                    <option value="0.5">0.5°C</option>
+                    <option value="0.2">0.2°C</option>
+                    <option value="0.1">0.1°C</option>
+                </select>
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(thermostat step size)</span>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-targetTemp"><i class="fa fa-crosshairs"></i> Target Temp</label>
-        <input type="number" id="node-input-targetTemp" step="0.5" style="width: 80px;"> °C
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(default setpoint)</span>
-    </div>
+            <div class="form-row">
+                <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Temperature Settings</h4>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-minTemp"><i class="fa fa-thermometer-empty"></i> Min Temp</label>
-        <input type="number" id="node-input-minTemp" step="0.5" style="width: 80px;"> °C
-    </div>
+            <div class="form-row">
+                <label for="node-input-targetTemp"><i class="fa fa-crosshairs"></i> Target Temp</label>
+                <input type="number" id="node-input-targetTemp" step="0.5" style="width: 80px;"> °C
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(default setpoint)</span>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-maxTemp"><i class="fa fa-thermometer-full"></i> Max Temp</label>
-        <input type="number" id="node-input-maxTemp" step="0.5" style="width: 80px;"> °C
-    </div>
+            <div class="form-row">
+                <label for="node-input-minTemp"><i class="fa fa-thermometer-empty"></i> Min Temp</label>
+                <input type="number" id="node-input-minTemp" step="0.5" style="width: 80px;"> °C
+            </div>
 
-    <div class="form-row">
-        <span id="temp-warning" style="color: #e74c3c; display: none;"></span>
-    </div>
+            <div class="form-row">
+                <label for="node-input-maxTemp"><i class="fa fa-thermometer-full"></i> Max Temp</label>
+                <input type="number" id="node-input-maxTemp" step="0.5" style="width: 80px;"> °C
+            </div>
 
-    <div class="form-row">
-        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Controller Settings</h4>
-    </div>
+            <div class="form-row">
+                <span id="temp-warning" style="color: #e74c3c; display: none;"></span>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-hysteresis"><i class="fa fa-arrows-h"></i> Hysteresis</label>
-        <input type="number" id="node-input-hysteresis" step="0.1" min="0" max="2" style="width: 80px;"> °C
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(dead-band to prevent oscillation)</span>
-    </div>
+            <div class="form-row">
+                <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Controller Settings</h4>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-maxOutputChange"><i class="fa fa-tachometer"></i> Max Change</label>
-        <input type="number" id="node-input-maxOutputChange" step="0.1" min="0.1" max="2" style="width: 80px;"> °C/cycle
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(rate limiting for battery saving)</span>
-    </div>
+            <div class="form-row">
+                <label for="node-input-hysteresis"><i class="fa fa-arrows-h"></i> Hysteresis</label>
+                <input type="number" id="node-input-hysteresis" step="0.1" min="0" max="2" style="width: 80px;"> °C
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(dead-band to prevent oscillation)</span>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-sampleInterval"><i class="fa fa-clock-o"></i> Sample Interval</label>
-        <input type="number" id="node-input-sampleInterval" step="1" min="1" style="width: 80px;"> seconds
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(expected time between readings)</span>
-    </div>
+            <div class="form-row">
+                <label for="node-input-maxOutputChange"><i class="fa fa-tachometer"></i> Max Change</label>
+                <input type="number" id="node-input-maxOutputChange" step="0.1" min="0.1" max="2" style="width: 80px;"> °C/cycle
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(rate limiting for battery saving)</span>
+            </div>
 
-    <div class="form-row">
-        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Adaptive Learning</h4>
-    </div>
+            <div class="form-row">
+                <label for="node-input-sampleInterval"><i class="fa fa-clock-o"></i> Sample Interval</label>
+                <input type="number" id="node-input-sampleInterval" step="1" min="1" style="width: 80px;"> seconds
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(expected time between readings)</span>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-learningEnabled"><i class="fa fa-graduation-cap"></i> Auto-tuning</label>
-        <input type="checkbox" id="node-input-learningEnabled" style="width: auto; vertical-align: middle;">
-        <span style="margin-left: 5px; color: #666; font-size: 12px;">Enable adaptive learning of PID parameters</span>
-    </div>
+            <div class="form-row">
+                <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Adaptive Learning</h4>
+            </div>
 
-    <div class="form-row">
-        <button type="button" id="node-reset-btn" class="red-ui-button" style="margin-top: 10px;">
-            <i class="fa fa-refresh"></i> Reset Learned Parameters
-        </button>
-    </div>
+            <div class="form-row">
+                <label for="node-input-learningEnabled"><i class="fa fa-graduation-cap"></i> Auto-tuning</label>
+                <input type="checkbox" id="node-input-learningEnabled" style="width: auto; vertical-align: middle;">
+                <span style="margin-left: 5px; color: #666; font-size: 12px;">Enable adaptive learning of PID parameters</span>
+            </div>
 
-    <div class="form-row">
-        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Output Settings</h4>
-    </div>
+            <div class="form-row">
+                <button type="button" id="node-reset-btn" class="red-ui-button" style="margin-top: 10px;">
+                    <i class="fa fa-refresh"></i> Reset Learned Parameters
+                </button>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-activeOutputFormat"><i class="fa fa-sign-out"></i> Active Output</label>
-        <select id="node-input-activeOutputFormat" style="width: 150px;">
-            <option value="boolean">Boolean (true/false)</option>
-            <option value="number">Number (1/0)</option>
-        </select>
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(output 3 format)</span>
-    </div>
+            <div class="form-row">
+                <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Output Settings</h4>
+            </div>
 
-    <div class="form-row">
-        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Schedule & Modes</h4>
-    </div>
+            <div class="form-row">
+                <label for="node-input-activeOutputFormat"><i class="fa fa-sign-out"></i> Active Output</label>
+                <select id="node-input-activeOutputFormat" style="width: 150px;">
+                    <option value="boolean">Boolean (true/false)</option>
+                    <option value="number">Number (1/0)</option>
+                </select>
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(output 3 format)</span>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-operatingMode"><i class="fa fa-calendar"></i> Operating Mode</label>
-        <select id="node-input-operatingMode" style="width: 150px;">
-            <option value="manual">Manual</option>
-            <option value="schedule">Schedule</option>
-            <option value="off">Off</option>
-        </select>
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(default mode at startup)</span>
-    </div>
+            <div class="form-row">
+                <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Operating Mode</h4>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-awayTemp"><i class="fa fa-home"></i> Away Temp</label>
-        <input type="number" id="node-input-awayTemp" step="0.5" style="width: 80px;"> °C
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(temperature limit in away mode)</span>
-    </div>
+            <div class="form-row">
+                <label for="node-input-operatingMode"><i class="fa fa-calendar"></i> Default Mode</label>
+                <select id="node-input-operatingMode" style="width: 150px;">
+                    <option value="manual">Manual</option>
+                    <option value="schedule">Schedule</option>
+                    <option value="off">Off</option>
+                </select>
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(mode at startup)</span>
+            </div>
 
-    <div class="form-row">
-        <span style="color: #666; font-size: 12px;">
-            <i class="fa fa-info-circle"></i> Configure schedule via <code>msg.schedule</code>, boost via <code>msg.boost</code>, away via <code>msg.away</code>
-        </span>
-    </div>
+            <div class="form-row">
+                <label for="node-input-awayTemp"><i class="fa fa-home"></i> Away Temp</label>
+                <input type="number" id="node-input-awayTemp" step="0.5" style="width: 80px;"> °C
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(temperature limit in away mode)</span>
+            </div>
+        </div>
 
-    <div class="form-row">
-        <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Home Assistant Integration</h4>
-    </div>
+        <!-- ========== TAB: Schedule ========== -->
+        <div id="tab-schedule" style="display:none;">
+            <div class="form-row">
+                <label style="width: auto;">
+                    <input type="checkbox" id="node-input-scheduleEnabled" style="width: auto; vertical-align: middle;">
+                    <span style="margin-left: 5px;"><i class="fa fa-calendar-check-o"></i> Enable default schedule</span>
+                </label>
+            </div>
 
-    <div class="form-row">
-        <label for="node-input-mqttEnabled"><i class="fa fa-cloud"></i> MQTT Discovery</label>
-        <input type="checkbox" id="node-input-mqttEnabled" style="width: auto; vertical-align: middle;">
-        <span style="margin-left: 5px; color: #666; font-size: 12px;">Enable MQTT climate entity in Home Assistant</span>
-    </div>
+            <div class="form-row schedule-fields">
+                <label for="node-input-scheduleTimezone"><i class="fa fa-clock-o"></i> Timezone</label>
+                <select id="node-input-scheduleTimezone" style="width: 220px;">
+                    <option value="local">Local time (server)</option>
+                    <option value="UTC">UTC</option>
+                    <optgroup label="Europe">
+                        <option value="Europe/Warsaw">Europe/Warsaw (CET/CEST)</option>
+                        <option value="Europe/London">Europe/London (GMT/BST)</option>
+                        <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+                        <option value="Europe/Berlin">Europe/Berlin (CET/CEST)</option>
+                        <option value="Europe/Madrid">Europe/Madrid (CET/CEST)</option>
+                        <option value="Europe/Rome">Europe/Rome (CET/CEST)</option>
+                        <option value="Europe/Amsterdam">Europe/Amsterdam (CET/CEST)</option>
+                        <option value="Europe/Brussels">Europe/Brussels (CET/CEST)</option>
+                        <option value="Europe/Vienna">Europe/Vienna (CET/CEST)</option>
+                        <option value="Europe/Prague">Europe/Prague (CET/CEST)</option>
+                        <option value="Europe/Stockholm">Europe/Stockholm (CET/CEST)</option>
+                        <option value="Europe/Helsinki">Europe/Helsinki (EET/EEST)</option>
+                        <option value="Europe/Athens">Europe/Athens (EET/EEST)</option>
+                        <option value="Europe/Bucharest">Europe/Bucharest (EET/EEST)</option>
+                        <option value="Europe/Moscow">Europe/Moscow (MSK)</option>
+                    </optgroup>
+                    <optgroup label="Americas">
+                        <option value="America/New_York">America/New_York (EST/EDT)</option>
+                        <option value="America/Chicago">America/Chicago (CST/CDT)</option>
+                        <option value="America/Denver">America/Denver (MST/MDT)</option>
+                        <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+                        <option value="America/Toronto">America/Toronto (EST/EDT)</option>
+                        <option value="America/Sao_Paulo">America/Sao_Paulo (BRT)</option>
+                    </optgroup>
+                    <optgroup label="Asia/Pacific">
+                        <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                        <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
+                        <option value="Asia/Hong_Kong">Asia/Hong_Kong (HKT)</option>
+                        <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+                        <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                        <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
+                        <option value="Pacific/Auckland">Pacific/Auckland (NZST/NZDT)</option>
+                    </optgroup>
+                </select>
+            </div>
 
-    <div class="form-row mqtt-fields">
-        <label for="node-input-mqttBroker"><i class="fa fa-server"></i> MQTT Broker</label>
-        <input type="text" id="node-input-mqttBroker">
-    </div>
+            <div class="form-row schedule-fields" style="margin-top: 15px;">
+                <button type="button" id="schedule-copy-weekdays" class="red-ui-button">
+                    <i class="fa fa-copy"></i> Copy Mon &rarr; Tue-Fri
+                </button>
+                <button type="button" id="schedule-copy-weekend" class="red-ui-button" style="margin-left: 5px;">
+                    <i class="fa fa-copy"></i> Copy Sat &rarr; Sun
+                </button>
+                <button type="button" id="schedule-clear" class="red-ui-button" style="margin-left: 5px;">
+                    <i class="fa fa-trash"></i> Clear All
+                </button>
+            </div>
 
-    <div class="form-row mqtt-fields">
-        <label for="node-input-haDeviceName"><i class="fa fa-tag"></i> HA Device Name</label>
-        <input type="text" id="node-input-haDeviceName" placeholder="Smart Thermostat">
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(name in Home Assistant)</span>
-    </div>
+            <div id="schedule-days-container" class="schedule-fields" style="margin-top: 10px;">
+                <!-- Generated by JavaScript -->
+            </div>
 
-    <div class="form-row mqtt-fields">
-        <label for="node-input-mqttBaseTopic"><i class="fa fa-sitemap"></i> Discovery Topic</label>
-        <input type="text" id="node-input-mqttBaseTopic" placeholder="homeassistant">
-        <span style="margin-left: 10px; color: #666; font-size: 12px;">(HA MQTT discovery prefix)</span>
+            <div class="form-row schedule-fields" style="margin-top: 15px;">
+                <span style="color: #666; font-size: 12px;">
+                    <i class="fa fa-info-circle"></i> This schedule is used as default. Can be overridden at runtime via <code>msg.schedule</code> from HA or MQTT.
+                </span>
+            </div>
+        </div>
+
+        <!-- ========== TAB: MQTT ========== -->
+        <div id="tab-mqtt" style="display:none;">
+            <div class="form-row">
+                <h4 style="margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Home Assistant Integration</h4>
+            </div>
+
+            <div class="form-row">
+                <label for="node-input-mqttEnabled"><i class="fa fa-cloud"></i> MQTT Discovery</label>
+                <input type="checkbox" id="node-input-mqttEnabled" style="width: auto; vertical-align: middle;">
+                <span style="margin-left: 5px; color: #666; font-size: 12px;">Enable MQTT climate entity in Home Assistant</span>
+            </div>
+
+            <div class="form-row mqtt-fields">
+                <label for="node-input-mqttBroker"><i class="fa fa-server"></i> MQTT Broker</label>
+                <input type="text" id="node-input-mqttBroker">
+            </div>
+
+            <div class="form-row mqtt-fields">
+                <label for="node-input-haDeviceName"><i class="fa fa-tag"></i> HA Device Name</label>
+                <input type="text" id="node-input-haDeviceName" placeholder="Smart Thermostat">
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(name in Home Assistant)</span>
+            </div>
+
+            <div class="form-row mqtt-fields">
+                <label for="node-input-mqttBaseTopic"><i class="fa fa-sitemap"></i> Discovery Topic</label>
+                <input type="text" id="node-input-mqttBaseTopic" placeholder="homeassistant">
+                <span style="margin-left: 10px; color: #666; font-size: 12px;">(HA MQTT discovery prefix)</span>
+            </div>
+
+            <div class="form-row mqtt-fields" style="margin-top: 15px;">
+                <span style="color: #666; font-size: 12px;">
+                    <i class="fa fa-info-circle"></i> MQTT Discovery creates a climate entity in Home Assistant with:
+                    <ul style="margin-top: 5px; margin-left: 20px;">
+                        <li>Temperature control (set target temp)</li>
+                        <li>Mode selection (heat/cool/auto/off)</li>
+                        <li>Preset modes: away, boost</li>
+                    </ul>
+                </span>
+            </div>
+        </div>
     </div>
 </script>
 
@@ -316,6 +615,15 @@
         <li>Enable learning and let the system adapt (typically 1-24 hours)</li>
     </ol>
 
+    <h4>Schedule Configuration:</h4>
+    <p>Configure a default weekly schedule in the "Schedule" tab. Each day can have multiple time slots:</p>
+    <ul>
+        <li>Click "+ Add" to add a time slot</li>
+        <li>Set the time and temperature for each slot</li>
+        <li>Use copy buttons to replicate schedules between days</li>
+        <li>Schedule can be overridden at runtime via <code>msg.schedule</code></li>
+    </ul>
+
     <h4>Dynamic Control:</h4>
     <p>Send messages to change settings dynamically:</p>
     <ul>
@@ -326,7 +634,7 @@
         <li><code>msg.away = true</code> - Enable away mode</li>
     </ul>
 
-    <h4>Schedule Format:</h4>
+    <h4>Schedule Format (runtime override):</h4>
     <p>Weekly schedule with flexible time slots per day:</p>
     <pre>msg.schedule = {
     "monday": [
@@ -340,7 +648,8 @@
         {"time": "22:00", "temp": 18}
     ],
     // ... other days
-    "default": 18  // fallback temperature
+    "default": 18,  // fallback temperature
+    "timezone": "local"  // or "UTC"
 }</pre>
 
     <h4>Temperature Priority:</h4>

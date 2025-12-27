@@ -236,6 +236,16 @@ module.exports = function(RED) {
             node.log('Restored controller state (Kp=' + savedState.Kp + ', Ki=' + savedState.Ki + ', Kd=' + savedState.Kd + ')');
         }
 
+        // Load default schedule from UI config (if enabled and no runtime schedule already set)
+        if (config.scheduleEnabled && config.scheduleConfig && !controller.schedule) {
+            const scheduleWithTimezone = {
+                ...config.scheduleConfig,
+                timezone: config.scheduleTimezone || 'local'
+            };
+            controller.setSchedule(scheduleWithTimezone);
+            node.log('Loaded default schedule from UI config (timezone: ' + scheduleWithTimezone.timezone + ')');
+        }
+
         // Update node status
         function updateStatus(result) {
             const state = result.debug.state;
@@ -250,7 +260,6 @@ module.exports = function(RED) {
             let text = '';
 
             const activeMode = result.debug.activeMode || 'heat';
-            const modeIcon = activeMode === 'cool' ? '❄' : '🔥';
 
             // Status prefix for special modes
             let prefix = '';
@@ -272,7 +281,8 @@ module.exports = function(RED) {
             if (state === 'learning') {
                 fill = boostActive ? 'yellow' : 'yellow';
                 shape = 'dot';
-                text = `${prefix}Learning... (${result.debug.currentTemp}°C → ${result.output}°C)`;
+                const setpointIcon = activeMode === 'heat' ? '🔥' : '❄️';
+                text = `${prefix}Learning... 🌡️${result.debug.currentTemp}°C → 🎯${result.debug.targetTemp}°C → ${setpointIcon}${result.output}°C`;
             } else if (trend === 'idle') {
                 fill = boostActive ? 'yellow' : 'grey';
                 text = `${prefix}Idle at ${result.debug.currentTemp}°C`;
@@ -282,13 +292,13 @@ module.exports = function(RED) {
             } else {
                 if (Math.abs(error) < controllerConfig.hysteresis) {
                     fill = boostActive ? 'yellow' : 'green';
-                    text = `${prefix}Stable at ${result.debug.currentTemp}°C (setpoint: ${result.output}°C)`;
+                    text = `${prefix}✅ 🌡️${result.debug.currentTemp}°C (🎯${result.debug.targetTemp}°C)`;
                 } else if (activeMode === 'heat') {
                     fill = boostActive ? 'yellow' : 'red';
-                    text = `${prefix}${modeIcon} Heat: ${result.debug.currentTemp}°C → ${result.output}°C`;
+                    text = `${prefix}🌡️${result.debug.currentTemp}°C → 🎯${result.debug.targetTemp}°C → 🔥${result.output}°C`;
                 } else {
                     fill = boostActive ? 'yellow' : 'blue';
-                    text = `${prefix}${modeIcon} Cool: ${result.debug.currentTemp}°C → ${result.output}°C`;
+                    text = `${prefix}🌡️${result.debug.currentTemp}°C → 🎯${result.debug.targetTemp}°C → ❄️${result.output}°C`;
                 }
             }
 
@@ -406,32 +416,48 @@ module.exports = function(RED) {
                 wasCoolingActive = false;
                 isActive = false;
             } else if (activeMode === 'heat') {
-                // Heating mode with hysteresis latch:
+                // Heating mode with hysteresis latch and proactive activation:
                 // - Turn ON when temp drops below (target - hysteresis)
+                // - Turn ON proactively when PID requests heat AND temp is falling
                 // - Turn OFF when temp reaches target
                 // - In between: keep previous state
+                const setpointAboveTarget = result.output > result.debug.targetTemp + controllerConfig.precision;
+                const tempFalling = result.debug.trend === 'cooling';
+
                 if (error > hysteresis) {
                     // Too cold - definitely need heating
+                    wasHeatingActive = true;
+                } else if (setpointAboveTarget && tempFalling && error > 0) {
+                    // Proactive: PID requests heating AND temp is falling AND we're below target
+                    // Start heating early to prevent deep temperature drops (better for heat pumps)
                     wasHeatingActive = true;
                 } else if (error <= 0) {
                     // Reached or exceeded target - stop heating
                     wasHeatingActive = false;
                 }
-                // else: in hysteresis zone - keep previous state (wasHeatingActive unchanged)
+                // else: in hysteresis zone without proactive conditions - keep previous state
                 isActive = wasHeatingActive;
             } else if (activeMode === 'cool') {
-                // Cooling mode with hysteresis latch:
+                // Cooling mode with hysteresis latch and proactive activation:
                 // - Turn ON when temp rises above (target + hysteresis)
+                // - Turn ON proactively when PID requests cooling AND temp is rising
                 // - Turn OFF when temp reaches target
                 // - In between: keep previous state
+                const setpointBelowTarget = result.output < result.debug.targetTemp - controllerConfig.precision;
+                const tempRising = result.debug.trend === 'warming';
+
                 if (error < -hysteresis) {
                     // Too hot - definitely need cooling
+                    wasCoolingActive = true;
+                } else if (setpointBelowTarget && tempRising && error < 0) {
+                    // Proactive: PID requests cooling AND temp is rising AND we're above target
+                    // Start cooling early to prevent temperature spikes
                     wasCoolingActive = true;
                 } else if (error >= 0) {
                     // Reached or dropped below target - stop cooling
                     wasCoolingActive = false;
                 }
-                // else: in hysteresis zone - keep previous state (wasCoolingActive unchanged)
+                // else: in hysteresis zone without proactive conditions - keep previous state
                 isActive = wasCoolingActive;
             }
 

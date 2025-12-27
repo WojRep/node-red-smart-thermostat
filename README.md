@@ -592,6 +592,38 @@ This deletes the state file and resets all learned parameters.
 
 ## Changelog
 
+### v2.0.13
+
+- **New Schedule Configuration Tab** - Graphical weekly schedule editor directly in Node-RED UI
+  - Configure default heating/cooling schedule without external automation
+  - Intuitive day-by-day time slot editor with add/remove buttons
+  - Copy buttons: "Copy Mon → Tue-Fri" and "Copy Sat → Sun" for quick setup
+  - Default temperature setting for times outside defined slots
+  - Timezone support: Local time or UTC
+  - Can be overridden by `msg.schedule` from Home Assistant or MQTT
+- **Reorganized Configuration Interface** - Settings now organized in tabs
+  - Settings tab: Temperature, PID, and general configuration
+  - Schedule tab: Default weekly schedule editor
+  - MQTT tab: Home Assistant MQTT Discovery settings
+
+### v2.0.12
+
+- **Enhanced node status display** - Status now shows all temperature values with icons
+  - Format: `🌡️21°C → 🎯22°C → 🔥28°C` (current → target → setpoint)
+  - 🌡️ = current temperature, 🎯 = target temperature, 🔥 = heating setpoint, ❄️ = cooling setpoint
+  - Stable state: `✅ 🌡️22°C (🎯22°C)` - shows current and target when stable
+- **Proactive heating/cooling activation** - Output 3 (isActive) now activates earlier for better energy efficiency
+  - When PID requests heating AND temperature is falling AND below target, boiler/heat pump starts proactively
+  - Prevents "empty heating" cycles where radiator valves open but heat source is off
+  - Especially beneficial for heat pumps: maintains higher COP, smoother inverter operation, avoids backup heater activation
+  - Same proactive logic applied to cooling mode
+- **Fixed critical integral windup bug** - Integral term now properly decreases when temperature overshoots target
+  - Now uses signed error instead of absolute error
+  - Setpoint no longer climbs indefinitely; stabilizes at correct offset for heat loss compensation
+- **Improved PID steady-state control** - Removed premature "stable" bypass that caused oscillations
+  - PID runs continuously, allowing integral term to accumulate offset
+  - Increased default Ki from 0.01 to 0.02 for better steady-state performance
+
 ### v2.0.8
 
 - **Fixed Active Output (Output 3)** - Improved logic for heating/cooling activation signal

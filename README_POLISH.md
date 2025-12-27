@@ -377,6 +377,38 @@ To usuwa plik stanu i resetuje wszystkie nauczone parametry.
 
 ## Historia zmian
 
+### v2.0.13
+
+- **Nowa zakładka konfiguracji harmonogramu** - Graficzny edytor harmonogramu tygodniowego bezpośrednio w UI Node-RED
+  - Konfiguracja domyślnego harmonogramu grzania/chłodzenia bez zewnętrznej automatyzacji
+  - Intuicyjny edytor slotów czasowych dla każdego dnia z przyciskami dodawania/usuwania
+  - Przyciski kopiowania: "Copy Mon → Tue-Fri" i "Copy Sat → Sun" dla szybkiej konfiguracji
+  - Ustawienie domyślnej temperatury dla czasów poza zdefiniowanymi slotami
+  - Obsługa stref czasowych: Czas lokalny lub UTC
+  - Może być nadpisany przez `msg.schedule` z Home Assistant lub MQTT
+- **Zreorganizowany interfejs konfiguracji** - Ustawienia podzielone na zakładki
+  - Zakładka Settings: Temperatura, PID i ogólna konfiguracja
+  - Zakładka Schedule: Edytor domyślnego harmonogramu tygodniowego
+  - Zakładka MQTT: Ustawienia Home Assistant MQTT Discovery
+
+### v2.0.12
+
+- **Ulepszony status węzła** - Status pokazuje teraz wszystkie temperatury z ikonami
+  - Format: `🌡️21°C → 🎯22°C → 🔥28°C` (aktualna → docelowa → setpoint)
+  - 🌡️ = aktualna temperatura, 🎯 = temperatura docelowa, 🔥 = setpoint grzania, ❄️ = setpoint chłodzenia
+  - Stan stabilny: `✅ 🌡️22°C (🎯22°C)` - pokazuje aktualną i docelową gdy stabilna
+- **Proaktywne włączanie grzania/chłodzenia** - Wyjście 3 (isActive) włącza się wcześniej dla lepszej efektywności energetycznej
+  - Gdy PID żąda grzania I temperatura spada I jesteśmy poniżej celu, kocioł/pompa ciepła startuje proaktywnie
+  - Zapobiega "pustym cyklom grzania" gdy zawory radiatorowe są otwarte, ale źródło ciepła jest wyłączone
+  - Szczególnie korzystne dla pomp ciepła: wyższy COP, płynniejsza praca inwertera, unikanie włączenia grzałki backup
+  - Ta sama proaktywna logika dla trybu chłodzenia
+- **Naprawiono krytyczny błąd integral windup** - Człon całkujący teraz prawidłowo maleje gdy temperatura przekroczy cel
+  - Teraz używa błędu ze znakiem zamiast wartości bezwzględnej
+  - Setpoint nie rośnie w nieskończoność; stabilizuje się na poprawnym offsecie kompensującym straty ciepła
+- **Ulepszone sterowanie PID w stanie ustalonym** - Usunięto przedwczesne przejście do "stable" powodujące oscylacje
+  - PID działa ciągle, pozwalając członowi całkującemu akumulować offset
+  - Zwiększono domyślne Ki z 0.01 do 0.02 dla lepszej stabilności
+
 ### v2.0.8
 
 - **Poprawiono wyjście Active (Wyjście 3)** - Ulepszona logika sygnału aktywacji grzania/chłodzenia
