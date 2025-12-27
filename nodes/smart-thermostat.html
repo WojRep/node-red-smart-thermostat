@@ -39,12 +39,15 @@
         oneditprepare: function() {
             var node = this;
 
+            // Get the editor panel - this is scoped to the current node's edit dialog
+            var editorPanel = $("#dialog-form");
+
             // Initialize tabs
             var tabs = RED.tabs.create({
                 id: "node-input-tabs",
                 onchange: function(tab) {
-                    $("#node-input-tabs-content").children().hide();
-                    $("#" + tab.id).show();
+                    editorPanel.find("#node-input-tabs-content").children().hide();
+                    editorPanel.find("#" + tab.id).show();
                 }
             });
             tabs.addTab({id: "tab-settings", label: "Settings"});
@@ -54,23 +57,23 @@
 
             // Temperature validation
             function validateTemps() {
-                var min = parseFloat($("#node-input-minTemp").val());
-                var max = parseFloat($("#node-input-maxTemp").val());
-                var target = parseFloat($("#node-input-targetTemp").val());
+                var min = parseFloat(editorPanel.find("#node-input-minTemp").val());
+                var max = parseFloat(editorPanel.find("#node-input-maxTemp").val());
+                var target = parseFloat(editorPanel.find("#node-input-targetTemp").val());
 
                 if (min >= max) {
-                    $("#temp-warning").text("Warning: Min temperature must be less than max temperature").show();
+                    editorPanel.find("#temp-warning").text("Warning: Min temperature must be less than max temperature").show();
                 } else if (target < min || target > max) {
-                    $("#temp-warning").text("Warning: Target temperature should be between min and max").show();
+                    editorPanel.find("#temp-warning").text("Warning: Target temperature should be between min and max").show();
                 } else {
-                    $("#temp-warning").hide();
+                    editorPanel.find("#temp-warning").hide();
                 }
             }
 
-            $("#node-input-minTemp, #node-input-maxTemp, #node-input-targetTemp").on('change keyup', validateTemps);
+            editorPanel.find("#node-input-minTemp, #node-input-maxTemp, #node-input-targetTemp").on('change keyup', validateTemps);
 
             // Reset button
-            $("#node-reset-btn").click(function() {
+            editorPanel.find("#node-reset-btn").click(function() {
                 if (confirm("Reset learned parameters? The controller will restart learning.")) {
                     $.ajax({
                         url: "smart-thermostat/" + node.id + "/reset",
@@ -87,15 +90,15 @@
 
             // MQTT toggle visibility
             function toggleMqttFields() {
-                var mqttEnabled = $("#node-input-mqttEnabled").is(":checked");
+                var mqttEnabled = editorPanel.find("#node-input-mqttEnabled").is(":checked");
                 if (mqttEnabled) {
-                    $(".mqtt-fields").show();
+                    editorPanel.find(".mqtt-fields").show();
                 } else {
-                    $(".mqtt-fields").hide();
+                    editorPanel.find(".mqtt-fields").hide();
                 }
             }
 
-            $("#node-input-mqttEnabled").on("change", toggleMqttFields);
+            editorPanel.find("#node-input-mqttEnabled").on("change", toggleMqttFields);
             toggleMqttFields();
 
             // ========== Schedule Editor ==========
@@ -105,17 +108,19 @@
                 thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday'
             };
 
-            // Deep copy schedule config or empty object
+            // Deep copy schedule config or empty object - IMPORTANT: each node gets its own copy
             var scheduleData = node.scheduleConfig ? JSON.parse(JSON.stringify(node.scheduleConfig)) : {};
 
             // Set timezone value
             if (node.scheduleTimezone) {
-                $("#node-input-scheduleTimezone").val(node.scheduleTimezone);
+                editorPanel.find("#node-input-scheduleTimezone").val(node.scheduleTimezone);
             }
 
+            // Get the schedule container scoped to this editor
+            var scheduleContainer = editorPanel.find('#schedule-days-container');
+
             function renderSchedule() {
-                var container = $('#schedule-days-container');
-                container.empty();
+                scheduleContainer.empty();
 
                 days.forEach(function(day) {
                     var slots = scheduleData[day] || [];
@@ -136,12 +141,12 @@
 
                     slotsDiv.append('<button type="button" class="red-ui-button red-ui-button-small schedule-add-slot" data-day="' + day + '">+ Add</button>');
                     dayDiv.append(slotsDiv);
-                    container.append(dayDiv);
+                    scheduleContainer.append(dayDiv);
                 });
             }
 
-            // Event: Add slot
-            $('#schedule-days-container').on('click', '.schedule-add-slot', function() {
+            // Event: Add slot - scoped to this editor's container
+            scheduleContainer.on('click', '.schedule-add-slot', function() {
                 var day = $(this).data('day');
                 if (!scheduleData[day]) scheduleData[day] = [];
                 scheduleData[day].push({time: '08:00', temp: 20});
@@ -149,7 +154,7 @@
             });
 
             // Event: Remove slot
-            $('#schedule-days-container').on('click', '.schedule-slot-remove', function() {
+            scheduleContainer.on('click', '.schedule-slot-remove', function() {
                 var day = $(this).data('day');
                 var idx = $(this).data('idx');
                 scheduleData[day].splice(idx, 1);
@@ -160,7 +165,7 @@
             });
 
             // Event: Change time or temp
-            $('#schedule-days-container').on('change', '.slot-time, .slot-temp', function() {
+            scheduleContainer.on('change', '.slot-time, .slot-temp', function() {
                 var day = $(this).data('day');
                 var idx = $(this).data('idx');
                 if ($(this).hasClass('slot-time')) {
@@ -175,8 +180,8 @@
                 renderSchedule();
             });
 
-            // Copy Monday to weekdays
-            $('#schedule-copy-weekdays').click(function() {
+            // Copy Monday to weekdays - scoped to this editor
+            editorPanel.find('#schedule-copy-weekdays').click(function() {
                 var monday = scheduleData['monday'] || [];
                 ['tuesday','wednesday','thursday','friday'].forEach(function(day) {
                     scheduleData[day] = JSON.parse(JSON.stringify(monday));
@@ -186,7 +191,7 @@
             });
 
             // Copy Saturday to Sunday
-            $('#schedule-copy-weekend').click(function() {
+            editorPanel.find('#schedule-copy-weekend').click(function() {
                 var saturday = scheduleData['saturday'] || [];
                 scheduleData['sunday'] = JSON.parse(JSON.stringify(saturday));
                 renderSchedule();
@@ -194,7 +199,7 @@
             });
 
             // Clear all
-            $('#schedule-clear').click(function() {
+            editorPanel.find('#schedule-clear').click(function() {
                 if (confirm("Clear all schedule slots?")) {
                     days.forEach(function(day) {
                         delete scheduleData[day];
@@ -205,26 +210,27 @@
 
             // Toggle schedule fields visibility
             function toggleScheduleFields() {
-                if ($('#node-input-scheduleEnabled').is(':checked')) {
-                    $('.schedule-fields').show();
+                if (editorPanel.find('#node-input-scheduleEnabled').is(':checked')) {
+                    editorPanel.find('.schedule-fields').show();
                 } else {
-                    $('.schedule-fields').hide();
+                    editorPanel.find('.schedule-fields').hide();
                 }
             }
 
-            $('#node-input-scheduleEnabled').on('change', toggleScheduleFields);
+            editorPanel.find('#node-input-scheduleEnabled').on('change', toggleScheduleFields);
             toggleScheduleFields();
 
             // Initial render
             renderSchedule();
 
-            // Store scheduleData reference for oneditsave
+            // Store scheduleData reference for oneditsave - unique per node instance
             node._scheduleData = scheduleData;
         },
         oneditsave: function() {
-            // Save schedule data
+            // Save schedule data - use scoped selector
+            var editorPanel = $("#dialog-form");
             if (this._scheduleData) {
-                this._scheduleData.timezone = $('#node-input-scheduleTimezone').val();
+                this._scheduleData.timezone = editorPanel.find('#node-input-scheduleTimezone').val();
                 // Remove legacy default field - we use targetTemp from Settings
                 delete this._scheduleData.default;
                 this.scheduleConfig = this._scheduleData;

@@ -88,6 +88,35 @@ npm publish --access public
 echo -e "${GREEN}✓ Published to npmjs.com${NC}"
 
 echo ""
+echo -e "${YELLOW}Step 6: Refreshing Node-RED Flow Library...${NC}"
+# Wait a moment for npm to propagate
+sleep 5
+
+# Trigger refresh via the add form (requires CSRF token)
+COOKIE_FILE=$(mktemp)
+CSRF_TOKEN=$(curl -s -c "$COOKIE_FILE" "https://flows.nodered.org/add/node" 2>/dev/null | grep 'id="add-node-csrf"' | sed 's/.*value="\([^"]*\)".*/\1/')
+
+if [ -n "$CSRF_TOKEN" ]; then
+    # URL encode the package name (@ becomes %40, / becomes %2F)
+    ENCODED_NAME=$(echo "$PACKAGE_NAME" | sed 's/@/%40/g; s/\//%2F/g')
+
+    REFRESH_RESULT=$(curl -s -b "$COOKIE_FILE" -X POST "https://flows.nodered.org/add/node" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -H "Referer: https://flows.nodered.org/add/node" \
+        -d "_csrf=${CSRF_TOKEN}&module=${ENCODED_NAME}" \
+        2>/dev/null)
+
+    if echo "$REFRESH_RESULT" | grep -q "node-red-smart-thermostat"; then
+        echo -e "${GREEN}✓ Flow Library refresh triggered${NC}"
+    else
+        echo -e "${YELLOW}⚠ Flow Library refresh may have failed (check manually)${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ Could not get CSRF token for Flow Library refresh${NC}"
+fi
+rm -f "$COOKIE_FILE" 2>/dev/null
+
+echo ""
 echo -e "${GREEN}=== Release Complete! ===${NC}"
 echo ""
 echo "Summary:"
@@ -95,7 +124,7 @@ echo "  - Version: v${VERSION}"
 echo "  - Package: ${PACKAGE_FILE}"
 echo "  - GitHub: https://github.com/WojRep/node-red-smart-thermostat/releases/tag/v${VERSION}"
 echo "  - npm: https://www.npmjs.com/package/${PACKAGE_NAME}"
+echo "  - flows: https://flows.nodered.org/node/${PACKAGE_NAME}"
 echo ""
-echo -e "${YELLOW}Note: Node-RED flows library will auto-update from npm within ~1 hour${NC}"
-echo "  - https://flows.nodered.org/node/${PACKAGE_NAME}"
+echo -e "${YELLOW}Note: Flow Library may take a few minutes to update${NC}"
 echo ""

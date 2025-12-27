@@ -1,6 +1,6 @@
 {
   "name": "@wrepinski/node-red-smart-thermostat",
-  "version": "2.0.13b",
+  "version": "2.0.15",
   "description": "Smart thermostat node with adaptive PID control, weekly schedules, boost mode, and Home Assistant MQTT integration. Supports Zigbee radiator valves and AC units.",
   "keywords": [
     "node-red",
