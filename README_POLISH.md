@@ -377,21 +377,23 @@ To usuwa plik stanu i resetuje wszystkie nauczone parametry.
 
 ## Historia zmian
 
-### v2.0.13
+### v2.0.13-2.0.15
 
 - **Nowa zakładka konfiguracji harmonogramu** - Graficzny edytor harmonogramu tygodniowego bezpośrednio w UI Node-RED
   - Konfiguracja domyślnego harmonogramu grzania/chłodzenia bez zewnętrznej automatyzacji
   - Intuicyjny edytor slotów czasowych dla każdego dnia z przyciskami dodawania/usuwania
   - Przyciski kopiowania: "Copy Mon → Tue-Fri" i "Copy Sat → Sun" dla szybkiej konfiguracji
-  - Ustawienie domyślnej temperatury dla czasów poza zdefiniowanymi slotami
-  - Obsługa stref czasowych: Czas lokalny lub UTC
+  - Obsługa stref czasowych: Czas lokalny, UTC lub nazwy IANA (np. `Europe/Warsaw`)
+  - Temperatura przenosi się przez północ z ostatniego slotu poprzedniego dnia
   - Może być nadpisany przez `msg.schedule` z Home Assistant lub MQTT
 - **Zreorganizowany interfejs konfiguracji** - Ustawienia podzielone na zakładki
   - Zakładka Settings: Temperatura, PID i ogólna konfiguracja
   - Zakładka Schedule: Edytor domyślnego harmonogramu tygodniowego
   - Zakładka MQTT: Ustawienia Home Assistant MQTT Discovery
+- **Naprawiono izolację wielu instancji węzła** - Konfiguracja harmonogramu nie jest już współdzielona między instancjami
+- **Ulepszenie skryptu release** - Automatyczne odświeżanie Node-RED Flow Library po publikacji npm
 
-### v2.0.12
+### v2.0.9-2.0.12
 
 - **Ulepszony status węzła** - Status pokazuje teraz wszystkie temperatury z ikonami
   - Format: `🌡️21°C → 🎯22°C → 🔥28°C` (aktualna → docelowa → setpoint)

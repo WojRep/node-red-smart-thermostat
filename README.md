@@ -592,21 +592,23 @@ This deletes the state file and resets all learned parameters.
 
 ## Changelog
 
-### v2.0.13
+### v2.0.13-2.0.15
 
 - **New Schedule Configuration Tab** - Graphical weekly schedule editor directly in Node-RED UI
   - Configure default heating/cooling schedule without external automation
   - Intuitive day-by-day time slot editor with add/remove buttons
   - Copy buttons: "Copy Mon → Tue-Fri" and "Copy Sat → Sun" for quick setup
-  - Default temperature setting for times outside defined slots
-  - Timezone support: Local time or UTC
+  - Timezone support: Local time, UTC, or IANA timezone names (e.g., `Europe/Warsaw`)
+  - Temperature carries over midnight from previous day's last slot
   - Can be overridden by `msg.schedule` from Home Assistant or MQTT
 - **Reorganized Configuration Interface** - Settings now organized in tabs
   - Settings tab: Temperature, PID, and general configuration
   - Schedule tab: Default weekly schedule editor
   - MQTT tab: Home Assistant MQTT Discovery settings
+- **Fixed multi-node instance isolation** - Schedule configuration no longer shared between multiple node instances
+- **Release script enhancement** - Automatic Node-RED Flow Library refresh after npm publish
 
-### v2.0.12
+### v2.0.9-2.0.12
 
 - **Enhanced node status display** - Status now shows all temperature values with icons
   - Format: `🌡️21°C → 🎯22°C → 🔥28°C` (current → target → setpoint)
