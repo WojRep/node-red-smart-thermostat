@@ -246,6 +246,12 @@ module.exports = function(RED) {
             node.log('Loaded default schedule from UI config (timezone: ' + scheduleWithTimezone.timezone + ')');
         }
 
+        // Synchronize schedule state on startup (ensures correct target temp even if deployed mid-schedule)
+        if (controller.schedule) {
+            const targetTemp = controller.syncSchedule();
+            node.log('Schedule synchronized on startup (target: ' + targetTemp + '°C)');
+        }
+
         // Update node status
         function updateStatus(result) {
             const state = result.debug.state;
@@ -377,7 +383,26 @@ module.exports = function(RED) {
             // Get temperature from payload
             const currentTemp = parseFloat(msg.payload);
 
+            // Check if any configuration was changed in this message
+            const configChanged = stateChanged ||
+                msg.boost !== undefined ||
+                msg.away !== undefined ||
+                msg.operatingMode !== undefined ||
+                msg.setpoint !== undefined ||
+                msg.mode !== undefined;
+
             if (isNaN(currentTemp)) {
+                // No temperature in message - but if config changed, sync schedule and update status
+                if (configChanged) {
+                    controller.syncSchedule();
+                    // Update status if we have a previous temperature reading
+                    if (controller.currentTemp !== null) {
+                        const result = controller.getStatus();
+                        updateStatus(result);
+                    }
+                    if (done) done();
+                    return;
+                }
                 node.warn('Invalid temperature value received: ' + msg.payload);
                 if (done) done();
                 return;
