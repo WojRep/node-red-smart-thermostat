@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.0.18
+
+- **Fixed Operating Mode Priority** - `operatingMode` now correctly controls temperature source
+  - **Manual mode**: External setpoint (from Home Assistant via `msg.setpoint`) takes full priority, built-in schedule is ignored
+  - **Schedule mode**: Built-in schedule controls temperature, but external setpoint creates a temporary override
+  - Previously, schedule always overrode setpoint regardless of operating mode, causing heating not to activate when expected
+- **Temporary Schedule Override** - In schedule mode, setting temperature via `msg.setpoint` creates a temporary override
+  - Override remains active until the next schedule slot change
+  - Automatically reverts to schedule when a new time slot begins
+  - Visual indicator in node status: `📅🔧` shows when override is active
+- **New debug output field** - Added `scheduleOverrideActive` to debug output (output 2)
+- **State persistence** - Schedule override state is now saved and restored across Node-RED restarts
+
 ## v2.0.16-2.0.17
 
 - **Fixed Schedule Synchronization on Startup** - Schedule now applies immediately when Node-RED starts or node is deployed

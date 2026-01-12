@@ -276,7 +276,7 @@ module.exports = function(RED) {
             } else if (awayMode) {
                 prefix = '🏠 AWAY ';
             } else if (operatingMode === 'schedule') {
-                prefix = '📅 ';
+                prefix = result.debug.scheduleOverrideActive ? '📅🔧 ' : '📅 ';
             } else if (operatingMode === 'off') {
                 fill = 'grey';
                 shape = 'ring';
